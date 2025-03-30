@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "813893921216",
+    "project_id": "ahilyanagar-corporation-14760",
+    "storage_bucket": "ahilyanagar-corporation-14760.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:813893921216:android:5abe7fb6c7775efe0a8025",
+        "android_client_info": {
+          "package_name": "com.example.ahilyanagar"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUlHx3u6-0DBoaqVvr16F47ZPyaTicpHk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
