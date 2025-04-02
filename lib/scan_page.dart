@@ -1,42 +1,101 @@
 import 'package:firebase_database/firebase_database.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter/material.dart';
+import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:image/image.dart' as img;
+import 'dart:typed_data';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'check_in_status.dart';
+import 'check_in_success.dart';
+import 'package:camera/camera.dart';
+import 'check_out_status.dart';
+import 'check_out_success.dart';
+import 'dart:math';
+import 'dart:io'; // Required for File operations
+import 'package:image_picker/image_picker.dart';
+import 'dart:convert';
+import 'package:flutter/foundation.dart'; // For using compute()
 
 class ScanPage extends StatefulWidget {
+  final bool isCheckIn; // true for Check-In, false for Check-Out
+
+  ScanPage({required this.isCheckIn});
+
   @override
   _ScanPageState createState() => _ScanPageState();
 }
 
 class _ScanPageState extends State<ScanPage> {
-  bool isProcessing = false; // Prevent multiple scans
-  String? scannedEmployeeId;
+  bool isProcessing = false;
+  String? scannedWorkerId;
+  bool faceVectorExists = false;
+  Interpreter? _interpreter;
+  final ImagePicker _picker = ImagePicker();
+  
+
+  @override
+  void initState() {
+    super.initState();
+    loadModel();
+  }
+
+  Future<void> loadModel() async {
+    try {
+      _interpreter = await Interpreter.fromAsset(
+        'assets/mobile_face_net.tflite',
+      );
+    } catch (e) {
+      print("Error loading model: $e");
+    }
+  }
+
+  @override
+  void dispose() {
+    _interpreter?.close();
+    super.dispose();
+  }
+
+  
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Scan QR for Attendance")),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              "1️⃣ Scan QR Code for Attendance",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: Text("Scan QR Code"),
+        backgroundColor: Colors.blue,
+        centerTitle: true,
+      ),
+      body: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // SVG Image
+          Center(
+            child: SvgPicture.asset('assets/scan_selfie.svg', height: 200),
+          ),
+
+          SizedBox(height: 30),
+          // Scan QR Button
+          ElevatedButton(
+            onPressed: () => scanQRCode(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
             ),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => scanQRCode(),
-              child: Text("Scan QR"),
+            child: Text(
+              "Scan QR",
+              style: TextStyle(fontSize: 18, color: Colors.white),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  // 🔹 Function to Scan QR Code
-  void scanQRCode() {
+  Future<void> scanQRCode() async {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -46,23 +105,22 @@ class _ScanPageState extends State<ScanPage> {
           content: SizedBox(
             height: 300,
             child: MobileScanner(
-              onDetect: (BarcodeCapture capture) {
+              onDetect: (BarcodeCapture capture) async {
                 if (!isProcessing) {
                   isProcessing = true;
                   final List<Barcode> barcodes = capture.barcodes;
                   if (barcodes.isNotEmpty) {
-                    final String? employeeId = barcodes.first.rawValue;
-                    if (employeeId != null) {
+                    final String? workerId = barcodes.first.rawValue;
+                    if (workerId != null) {
                       setState(() {
-                        scannedEmployeeId = employeeId;
+                        scannedWorkerId = workerId;
                       });
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("QR Scanned: $employeeId")),
+                        SnackBar(content: Text("QR Scanned: $workerId")),
                       );
 
-                      // ✅ Mark attendance after QR scan
-                      markAttendance(employeeId);
+                      await checkWorkerData(workerId);
                     }
                   }
                 }
@@ -74,35 +132,445 @@ class _ScanPageState extends State<ScanPage> {
     );
   }
 
-  // 🔹 Function to Mark Attendance
-  void markAttendance(String employeeId) async {
-    DateTime now = DateTime.now();
-    String formattedDate = "${now.day}-${now.month}-${now.year}";
-    String formattedTime = _formatTime(now);
+  void showAddFaceDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text("Face Not Registered"),
+            content: Text("No face record found. Please add a face."),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await registerWorker(scannedWorkerId!);
+                },
+                child: Text("Add Face"),
+              ),
+            ],
+          ),
+    );
+  }
 
-    DatabaseReference ref = FirebaseDatabase.instance.ref("workers/$employeeId/attendance/$formattedDate");
+  void showFaceScanDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text("Face Verification"),
+            content: Text("Scan your face to mark attendance."),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await scanFaceAndVerify();
+                },
+                child: Text("Scan Face"),
+              ),
+            ],
+          ),
+    );
+  }
 
+  Future<void> checkWorkerData(String workerId) async {
+    DatabaseReference ref = FirebaseDatabase.instance.ref("workers/$workerId");
     DatabaseEvent event = await ref.once();
-    if (event.snapshot.exists && (event.snapshot.value as Map).containsKey("check_in")) {
-      await ref.update({"check_out": formattedTime});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Check-Out recorded at $formattedTime")),
-      );
+
+    if (event.snapshot.exists && event.snapshot.value != null) {
+      var data = event.snapshot.value as Map<dynamic, dynamic>;
+
+      setState(() {
+        faceVectorExists = data.containsKey("feature_vector");
+        scannedWorkerId = workerId;
+      });
+
+      if (faceVectorExists) {
+        showFaceScanDialog();
+      } else {
+        showAddFaceDialog();
+      }
     } else {
-      await ref.update({"check_in": formattedTime});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Check-In recorded at $formattedTime")),
-      );
+      await registerWorker(workerId);
     }
   }
 
-  // 🔹 Helper function to format time
-  String _formatTime(DateTime time) {
-    int hour = time.hour;
-    String period = hour >= 12 ? "PM" : "AM";
-    hour = hour % 12;
-    if (hour == 0) hour = 12;
-    String minute = time.minute.toString().padLeft(2, '0');
-    return "$hour:$minute $period";
+  Future<void> scanFaceAndVerify() async {
+  img.Image? capturedFace = await captureAndDetectFace();
+
+  if (capturedFace == null) {
+    print("Face scan failed, staying on the same page.");
+    return; // Prevents accidental navigation
   }
+
+  if (scannedWorkerId == null) {
+    print("ERROR: Worker ID is null. Cannot proceed.");
+    return;
+  }
+
+  final tempDir = await getTemporaryDirectory();
+  final tempPath = "${tempDir.path}/captured_face.jpg";
+  File(tempPath).writeAsBytesSync(img.encodeJpg(capturedFace));
+
+  List<double> capturedVector = extractFeatureVector(capturedFace, _interpreter!);
+  capturedVector = normalizeVector(capturedVector);
+
+  DatabaseReference ref = FirebaseDatabase.instance.ref("workers/$scannedWorkerId");
+  DatabaseEvent event = await ref.once();
+
+  if (!event.snapshot.exists || event.snapshot.value == null) {
+    print("ERROR: Worker record not found in database.");
+    return;
+  }
+
+  var data = event.snapshot.value as Map<dynamic, dynamic>;
+  if (!data.containsKey("feature_vector")) {
+    print("ERROR: Feature vector not found for worker.");
+    return;
+  }
+
+  List<double> storedVector = (data["feature_vector"] as String)
+      .split(',')
+      .map((e) => double.parse(e))
+      .toList();
+  storedVector = normalizeVector(storedVector);
+
+  double similarity = cosineSimilarity(capturedVector, storedVector);
+  print("Similarity score: $similarity");
+
+  if (similarity > 0.6) {
+    print("Face matched successfully, proceeding with check-in/check-out.");
+    await markAttendanceAndNavigate(scannedWorkerId!, widget.isCheckIn, tempPath);
+  } else {
+    print("Face does not match, showing failure message.");
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CheckInStatusPage(
+          statusMessage: "Face does not match. Try again.",
+          isSuccess: false,
+        ),
+      ),
+    );
+  }
+}
+
+
+  Future<void> markAttendanceAndNavigate(String workerId, bool isCheckIn, String imagePath) async {
+  try {
+    DatabaseReference attendanceRef = FirebaseDatabase.instance.ref("workers/$workerId/attendance");
+
+    DateTime now = DateTime.now();
+    String formattedDate = DateFormat("dd MMM yyyy").format(now);
+    String formattedTime = DateFormat("hh:mm a").format(now);
+
+    DatabaseReference dateRef = attendanceRef.child(formattedDate);
+
+    DatabaseEvent workerEvent = await FirebaseDatabase.instance.ref("workers/$workerId").once();
+    if (!workerEvent.snapshot.exists || workerEvent.snapshot.value == null) {
+      print("ERROR: Worker data not found.");
+      return;
+    }
+
+    var workerData = workerEvent.snapshot.value as Map<dynamic, dynamic>;
+    String workerName = workerData["name"];
+
+    if (isCheckIn) {
+      DatabaseEvent event = await dateRef.child("check_in").once();
+      if (!event.snapshot.exists) {
+        await dateRef.child("check_in").set(formattedTime);
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CheckInStatusPage(
+              statusMessage: "✅ Check-In Successful!",
+              isSuccess: true,
+              name: workerName,
+              employeeId: workerId,
+              checkInTime: formattedTime,
+              date: formattedDate,
+              imagePath: imagePath,
+            ),
+          ),
+        );
+        return;
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CheckInStatusPage(
+              statusMessage: "⚠️ Check-In already recorded!",
+              isSuccess: false,
+            ),
+          ),
+        );
+        return;
+      }
+    } else {
+      DatabaseEvent checkInEvent = await dateRef.child("check_in").once();
+      DatabaseEvent checkOutEvent = await dateRef.child("check_out").once();
+
+      if (!checkInEvent.snapshot.exists) {
+        print("ERROR: No check-in record found for today.");
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CheckOutStatusPage(
+              statusMessage: "⚠️ No Check-In found for today!",
+              isSuccess: false,
+            ),
+          ),
+        );
+        return;
+      }
+
+      if (checkOutEvent.snapshot.exists) {
+        print("ERROR: Check-Out already recorded.");
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CheckOutStatusPage(
+              statusMessage: "⚠️ Check-Out already recorded!",
+              isSuccess: false,
+            ),
+          ),
+        );
+        return;
+      }
+
+      await dateRef.child("check_out").set(formattedTime);
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CheckOutSuccessPage(
+            name: workerName,
+            employeeId: workerId,
+            checkOutTime: formattedTime,
+            date: formattedDate,
+            imagePath: imagePath,
+          ),
+        ),
+      );
+    }
+  } catch (e) {
+    print("ERROR in markAttendanceAndNavigate: $e");
+  }
+}
+
+
+  List<double> normalizeVector(List<double> vector) {
+    double norm = sqrt(vector.fold(0, (sum, v) => sum + v * v));
+    return norm == 0 ? vector : vector.map((v) => v / norm).toList();
+  }
+
+  double cosineSimilarity(List<double> vectorA, List<double> vectorB) {
+    if (vectorA.length != vectorB.length) return -1;
+
+    double dotProduct = 0.0;
+    for (int i = 0; i < vectorA.length; i++) {
+      dotProduct += vectorA[i] * vectorB[i];
+    }
+    return dotProduct; // Already normalized
+  }
+
+  Future<void> registerWorker(String workerId) async {
+  String? workerName = await promptForInput("Enter Worker Name");
+  if (workerName == null || workerName.isEmpty) return;
+
+  String? mobileNumber = await promptForInput("Enter Mobile Number");
+  if (mobileNumber == null || mobileNumber.isEmpty) return;
+
+  img.Image? faceImage = await captureAndDetectFace();
+  if (faceImage == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("No face detected. Please try again.")),
+    );
+    return;
+  }
+
+  if (_interpreter == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Model not loaded. Please try again later.")),
+    );
+    return;
+  }
+
+  List<double> featureVector = await compute(
+    extractFeatureVectorTopLevel,
+    FeatureExtractionData(faceImage: faceImage, interpreter: _interpreter!),
+  );
+
+  if (featureVector.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Feature extraction failed. Try again.")),
+    );
+    return;
+  }
+
+  DatabaseReference ref = FirebaseDatabase.instance.ref("workers/$workerId");
+
+  await ref.set({
+    "worker_id": workerId,
+    "name": workerName,
+    "mobile": mobileNumber,
+    "feature_vector": featureVector.join(','),
+  }).then((_) {
+    setState(() {
+      faceVectorExists = true;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("✅ Registration Successful!")),
+    );
+
+    // ✅ Delay for 2 seconds, then return to the home screen
+    Future.delayed(Duration(seconds: 2), () {
+      if (!mounted) return;
+      Navigator.pop(context); // Go back to the previous screen
+    });
+  }).catchError((error) {
+    print("Firebase Write Error: $error");
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("❌ Error storing worker data. Try again.")),
+    );
+  });
+}
+
+
+  Future<String?> promptForInput(String title) async {
+    TextEditingController controller = TextEditingController();
+    return await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: controller,
+            decoration: InputDecoration(hintText: title),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, controller.text.trim());
+              },
+              child: Text("OK"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, null);
+              },
+              child: Text("Cancel"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Top-level function for feature extraction
+  static List<double> extractFeatureVectorTopLevel(FeatureExtractionData data) {
+    return extractFeatureVector(data.faceImage, data.interpreter);
+  }
+
+  // Feature extraction logic
+  static List<double> extractFeatureVector(
+    img.Image face,
+    Interpreter interpreter,
+  ) {
+    img.Image resizedFace = img.copyResize(face, width: 112, height: 112);
+    var input = Float32List(112 * 112 * 3);
+    var buffer = input.buffer.asFloat32List();
+
+    for (int y = 0; y < 112; y++) {
+      for (int x = 0; x < 112; x++) {
+        var pixel = resizedFace.getPixel(x, y);
+        int index = (y * 112 + x) * 3;
+        buffer[index] = pixel.r / 255.0;
+        buffer[index + 1] = pixel.g / 255.0;
+        buffer[index + 2] = pixel.b / 255.0;
+      }
+    }
+
+    var output = List.filled(192, 0.0).reshape([1, 192]);
+    interpreter.run(input.reshape([1, 112, 112, 3]), output);
+    return output[0];
+  }
+
+  Future<img.Image?> captureAndDetectFace() async {
+  try {
+    // Let the user choose which camera to use
+    XFile? pickedImage = await _picker.pickImage(
+      source: ImageSource.camera, // Do not force front camera
+    );
+
+    if (pickedImage == null) {
+      print("No image captured");
+      return null;
+    }
+
+    Uint8List imageBytes = await pickedImage.readAsBytes();
+    img.Image? image = img.decodeImage(imageBytes);
+
+    if (image == null) {
+      print("Error decoding image");
+      return null;
+    }
+
+    // Fix image rotation before processing
+    image = _fixImageRotation(image, pickedImage.path);
+
+    // Face detection
+    FaceDetector faceDetector = FaceDetector(
+      options: FaceDetectorOptions(performanceMode: FaceDetectorMode.accurate),
+    );
+
+    InputImage inputImage = InputImage.fromFilePath(pickedImage.path);
+    List<Face> faces = await faceDetector.processImage(inputImage);
+    faceDetector.close();
+
+    if (faces.isEmpty) {
+      print("No face detected in image");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("No face detected! Try again.")),
+      );
+      return null;
+    }
+
+    Face detectedFace = faces.first;
+    Rect faceBounds = detectedFace.boundingBox;
+    img.Image croppedFace = cropFace(image, faceBounds);
+
+    print("Face detected and cropped successfully");
+
+    return croppedFace;
+  } catch (e) {
+    print("Error in captureAndDetectFace: $e");
+    return null;
+  }
+}
+
+
+  img.Image cropFace(img.Image image, Rect faceBounds) {
+    int x = max(0, faceBounds.left.toInt());
+    int y = max(0, faceBounds.top.toInt());
+    int width = min(image.width - x, faceBounds.width.toInt());
+    int height = min(image.height - y, faceBounds.height.toInt());
+
+    return img.copyCrop(image, x: x, y: y, width: width, height: height);
+  }
+
+  img.Image _fixImageRotation(img.Image image, String path) {
+    var decodedImage = img.decodeImage(File(path).readAsBytesSync());
+    if (decodedImage == null) return image;
+    return img.bakeOrientation(decodedImage);
+  }
+}
+
+// Helper class to pass data to the isolate
+class FeatureExtractionData {
+  final img.Image faceImage;
+  final Interpreter interpreter;
+
+  FeatureExtractionData({required this.faceImage, required this.interpreter});
 }
