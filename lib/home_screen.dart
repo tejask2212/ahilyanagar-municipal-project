@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'login_screen.dart';
 import 'register_worker_screen.dart';
+import 'about_screen.dart';
+import 'report_screen.dart';
 import 'scan_page.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -65,7 +67,7 @@ class HomeScreen extends StatelessWidget {
                   context,
                   "Register",
                   "Register a new worker with this.",
-                  Icons.settings,
+                  Icons.person,
                   Colors.teal,
                   null, // No scan page navigation
                 ),
@@ -96,34 +98,48 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget buildTile(BuildContext context, String title, String subtitle,
-      IconData icon, Color color, bool? isCheckIn) {
-    return Padding(
-      padding: EdgeInsets.all(8.0),
-      child: Card(
-        color: color,
-        child: ListTile(
-            leading: Icon(icon, color: Colors.white),
-            title: Text(title,
-                style: TextStyle(color: Colors.white, fontSize: 18)),
-            subtitle: Text(subtitle, style: TextStyle(color: Colors.white70)),
-            onTap: () {
-              if (isCheckIn != null) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ScanPage(isCheckIn: isCheckIn),
-                  ),
-                );
-              } else {
-                // Navigate to RegisterWorkerScreen
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => RegisterWorkerScreen()),
-                );
-              }
-            }),
+    IconData icon, Color color, bool? isCheckIn) {
+  return Padding(
+    padding: EdgeInsets.all(8.0),
+    child: Card(
+      color: color,
+      child: ListTile(
+        leading: Icon(icon, color: Colors.white),
+        title: Text(title, style: TextStyle(color: Colors.white, fontSize: 18)),
+        subtitle: Text(subtitle, style: TextStyle(color: Colors.white70)),
+        onTap: () {
+          if (isCheckIn != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ScanPage(isCheckIn: isCheckIn),
+              ),
+            );
+          } else {
+            // Handle navigation based on the title
+            if (title == "Register") {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => RegisterWorkerScreen()),
+              );
+            } else if (title == "Report") {
+              // Navigate to Report Screen (create ReportScreen if it doesn’t exist)
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ReportScreen()),
+              );
+            } else if (title == "About") {
+              // Navigate to About Screen (create AboutScreen if it doesn’t exist)
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => AboutScreen()),
+              );
+            }
+          }
+        },
       ),
-    );
-  }
+    ),
+  );
+}
+
 }
