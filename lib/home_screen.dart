@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'login_screen.dart';
+import 'register_worker_screen.dart';
 import 'scan_page.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -94,26 +95,34 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget buildTile(BuildContext context, String title, String subtitle, IconData icon, Color color, bool? isCheckIn) {
+  Widget buildTile(BuildContext context, String title, String subtitle,
+      IconData icon, Color color, bool? isCheckIn) {
     return Padding(
       padding: EdgeInsets.all(8.0),
       child: Card(
         color: color,
         child: ListTile(
-          leading: Icon(icon, color: Colors.white),
-          title: Text(title, style: TextStyle(color: Colors.white, fontSize: 18)),
-          subtitle: Text(subtitle, style: TextStyle(color: Colors.white70)),
-          onTap: () {
-            if (isCheckIn != null) { // Only navigate if isCheckIn is not null
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ScanPage(isCheckIn: isCheckIn),
-                ),
-              );
-            }
-          },
-        ),
+            leading: Icon(icon, color: Colors.white),
+            title: Text(title,
+                style: TextStyle(color: Colors.white, fontSize: 18)),
+            subtitle: Text(subtitle, style: TextStyle(color: Colors.white70)),
+            onTap: () {
+              if (isCheckIn != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ScanPage(isCheckIn: isCheckIn),
+                  ),
+                );
+              } else {
+                // Navigate to RegisterWorkerScreen
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => RegisterWorkerScreen()),
+                );
+              }
+            }),
       ),
     );
   }
