@@ -239,20 +239,25 @@ class _ScanPageState extends State<ScanPage> {
 
   if (similarity > 0.6) {
     print("Face matched successfully, proceeding with check-in/check-out.");
-    await markAttendanceAndNavigate(scannedWorkerId!, widget.isCheckIn, tempPath);
+    if (mounted) {
+      await markAttendanceAndNavigate(scannedWorkerId!, widget.isCheckIn, tempPath);
+    }
   } else {
     print("Face does not match, showing failure message.");
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => CheckInStatusPage(
-          statusMessage: "Face does not match. Try again.",
-          isSuccess: false,
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CheckInStatusPage(
+            statusMessage: "Face does not match. Try again.",
+            isSuccess: false,
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 }
+
 
 
   Future<void> markAttendanceAndNavigate(String workerId, bool isCheckIn, String imagePath) async {
@@ -499,56 +504,231 @@ class _ScanPageState extends State<ScanPage> {
 
   Future<img.Image?> captureAndDetectFace() async {
   try {
-    // Let the user choose which camera to use
-    XFile? pickedImage = await _picker.pickImage(
-      source: ImageSource.camera, // Do not force front camera
-    );
+    // Try to get image from either camera
+    final XFile? pickedImage = await _getImageWithRetry();
+    if (pickedImage == null) return null;
 
-    if (pickedImage == null) {
-      print("No image captured");
-      return null;
-    }
-
-    Uint8List imageBytes = await pickedImage.readAsBytes();
-    img.Image? image = img.decodeImage(imageBytes);
-
-    if (image == null) {
-      print("Error decoding image");
-      return null;
-    }
-
-    // Fix image rotation before processing
-    image = _fixImageRotation(image, pickedImage.path);
-
-    // Face detection
-    FaceDetector faceDetector = FaceDetector(
-      options: FaceDetectorOptions(performanceMode: FaceDetectorMode.accurate),
-    );
-
-    InputImage inputImage = InputImage.fromFilePath(pickedImage.path);
-    List<Face> faces = await faceDetector.processImage(inputImage);
-    faceDetector.close();
-
-    if (faces.isEmpty) {
-      print("No face detected in image");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("No face detected! Try again.")),
-      );
-      return null;
-    }
-
-    Face detectedFace = faces.first;
-    Rect faceBounds = detectedFace.boundingBox;
-    img.Image croppedFace = cropFace(image, faceBounds);
-
-    print("Face detected and cropped successfully");
-
-    return croppedFace;
-  } catch (e) {
+    // Process the image with proper error handling
+    return await _processCapturedImage(pickedImage);
+  } catch (e, stackTrace) {
     print("Error in captureAndDetectFace: $e");
+    print("Stack trace: $stackTrace");
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error capturing image. Please try again.")),
+      );
+    }
     return null;
   }
 }
+
+Future<XFile?> _getImageWithRetry() async {
+  try {
+    final frontImage = await _picker.pickImage(
+      source: ImageSource.camera,
+      preferredCameraDevice: CameraDevice.front,
+      maxWidth: 1024,
+      imageQuality: 85,
+    );
+    if (frontImage != null) {
+      print("Front camera image captured: ${frontImage.path}");
+      return frontImage;
+    }
+  } catch (e) {
+    print("Front camera attempt failed: $e");
+  }
+
+  try {
+    final backImage = await _picker.pickImage(
+      source: ImageSource.camera,
+      preferredCameraDevice: CameraDevice.rear,
+      maxWidth: 1024,
+      imageQuality: 85,
+    );
+    if (backImage != null) {
+      print("Back camera image captured: ${backImage.path}");
+      return backImage;
+    }
+  } catch (e) {
+    print("Back camera attempt failed: $e");
+  }
+
+  return null;
+}
+
+
+Future<img.Image?> _processCapturedImage(XFile pickedImage) async {
+  try {
+    final imageBytes = await pickedImage.readAsBytes();
+    img.Image? image = await _decodeImageWithOrientation(imageBytes, pickedImage.path);
+    if (image == null) return null;
+
+    final faces = await _detectFaces(pickedImage.path);
+    print("Number of faces detected: ${faces.length}");
+
+    if (faces.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("No face detected! Please try again.")),
+        );
+      }
+      return null;
+    }
+
+    return _processBestFace(image, faces);
+  } catch (e) {
+    print("Error processing captured image: $e");
+    return null;
+  }
+}
+
+
+Future<img.Image?> _decodeImageWithOrientation(Uint8List bytes, String path) async {
+  try {
+    // First attempt to decode normally
+    img.Image? image = img.decodeImage(bytes);
+    if (image == null) return null;
+
+    // Apply orientation correction
+    return img.bakeOrientation(image);
+  } catch (e) {
+    print("Error decoding image with orientation: $e");
+    return null;
+  }
+}
+
+Future<List<Face>> _detectFaces(String imagePath) async {
+  final faceDetector = FaceDetector(
+    options: FaceDetectorOptions(
+      performanceMode: FaceDetectorMode.fast, // Changed to fast for back camera
+      enableContours: true, // Helps with rotated faces
+      enableClassification: false,
+      minFaceSize: 0.15, // Smaller minimum face size
+    ),
+  );
+
+  try {
+    final inputImage = InputImage.fromFilePath(imagePath);
+    return await faceDetector.processImage(inputImage);
+  } finally {
+    faceDetector.close();
+  }
+}
+
+img.Image _processBestFace(img.Image image, List<Face> faces) {
+  // Find the most centered face
+  Face bestFace = faces.reduce((a, b) {
+    final aCenter = _faceCenter(a, image.width, image.height);
+    final bCenter = _faceCenter(b, image.width, image.height);
+    final imageCenter = Point(image.width / 2, image.height / 2);
+    
+    final aDistance = _distance(aCenter, imageCenter);
+    final bDistance = _distance(bCenter, imageCenter);
+    
+    return aDistance < bDistance ? a : b;
+  });
+
+  // Add padding around the face
+  final padding = min(bestFace.boundingBox.width, bestFace.boundingBox.height) * 0.25;
+  
+  final rect = Rect.fromLTRB(
+    max(0, bestFace.boundingBox.left - padding),
+    max(0, bestFace.boundingBox.top - padding),
+    min(image.width.toDouble(), bestFace.boundingBox.right + padding),
+    min(image.height.toDouble(), bestFace.boundingBox.bottom + padding),
+  );
+
+  return img.copyCrop(
+    image,
+    x: rect.left.toInt(),
+    y: rect.top.toInt(),
+    width: rect.width.toInt(),
+    height: rect.height.toInt(),
+  );
+}
+
+Point<double> _faceCenter(Face face, int imageWidth, int imageHeight) {
+  return Point(
+    face.boundingBox.left + face.boundingBox.width / 2,
+    face.boundingBox.top + face.boundingBox.height / 2,
+  );
+}
+
+double _distance(Point<double> a, Point<double> b) {
+  final dx = a.x - b.x;
+  final dy = a.y - b.y;
+  return sqrt(dx * dx + dy * dy);
+}
+
+Future<img.Image?> _processImageFile(String imagePath) async {
+  try {
+    // Read and properly orient the image
+    final File imageFile = File(imagePath);
+    final Uint8List bytes = await imageFile.readAsBytes();
+    img.Image? image = img.decodeImage(bytes);
+    
+    if (image == null) {
+      print("Failed to decode image");
+      return null;
+    }
+
+    // Apply orientation correction
+    image = img.bakeOrientation(image);
+
+    // Face detection
+    final inputImage = InputImage.fromFilePath(imagePath);
+    final faceDetector = FaceDetector(
+      options: FaceDetectorOptions(
+        performanceMode: FaceDetectorMode.accurate,
+        enableContours: false,
+        enableClassification: false,
+      ),
+    );
+
+    final faces = await faceDetector.processImage(inputImage);
+    faceDetector.close();
+
+    if (faces.isEmpty) {
+      print("No faces detected");
+      return null;
+    }
+
+    // Process the largest face
+    return _cropLargestFace(image, faces);
+  } catch (e) {
+    print("Error processing image: $e");
+    return null;
+  }
+}
+
+img.Image _cropLargestFace(img.Image image, List<Face> faces) {
+  // Find largest face
+  Face largestFace = faces.reduce((a, b) => 
+    (a.boundingBox.width * a.boundingBox.height) > 
+    (b.boundingBox.width * b.boundingBox.height) ? a : b);
+
+  // Add 20% padding
+  final padding = min(largestFace.boundingBox.width, 
+                     largestFace.boundingBox.height) * 0.2;
+  
+  final rect = Rect.fromLTRB(
+    max(0, largestFace.boundingBox.left - padding),
+    max(0, largestFace.boundingBox.top - padding),
+    min(image.width.toDouble(), largestFace.boundingBox.right + padding),
+    min(image.height.toDouble(), largestFace.boundingBox.bottom + padding),
+  );
+
+  return img.copyCrop(
+    image,
+    x: rect.left.toInt(),
+    y: rect.top.toInt(),
+    width: rect.width.toInt(),
+    height: rect.height.toInt(),
+  );
+}
+
+
 
 
   img.Image cropFace(img.Image image, Rect faceBounds) {

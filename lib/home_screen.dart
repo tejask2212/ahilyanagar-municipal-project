@@ -62,8 +62,8 @@ class HomeScreen extends StatelessWidget {
 
                 buildTile(
                   context,
-                  "Settings",
-                  "Application settings, URL and KEY with QR code.",
+                  "Register",
+                  "Register a new worker with this.",
                   Icons.settings,
                   Colors.teal,
                   null, // No scan page navigation
