@@ -152,13 +152,15 @@ class _RegisterWorkerScreenState extends State<RegisterWorkerScreen> {
   }
 
   void showFaceScanDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text("Worker Already Registered"),
+    Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CheckInStatusPage(
+              statusMessage: "⚠️ Worker is already registered",
+              isSuccess: false,
+            ),
           ),
-    );
+        );
   }
 
   Future<void> checkWorkerData(String workerId) async {

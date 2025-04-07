@@ -173,9 +173,15 @@ class _ScanPageState extends State<ScanPage> {
     String workerDivision = data["division"] ?? "";
     if (workerDivision != widget.officerDivision) {
       // Division mismatch - block attendance
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("❌ This worker is not from your division.")),
-      );
+      Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CheckInStatusPage(
+              statusMessage: "❌ Worker is not from your division",
+              isSuccess: false,
+            ),
+          ),
+        );
       return;
     }
 
