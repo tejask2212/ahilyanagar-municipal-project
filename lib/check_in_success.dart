@@ -7,6 +7,7 @@ class CheckInSuccessPage extends StatelessWidget {
   final String checkInTime;
   final String date;
   final String imagePath;
+  final String division;
 
   CheckInSuccessPage({
     required this.name,
@@ -14,6 +15,7 @@ class CheckInSuccessPage extends StatelessWidget {
     required this.checkInTime,
     required this.date,
     required this.imagePath,
+    required this.division,
   });
 
   @override
@@ -25,64 +27,63 @@ class CheckInSuccessPage extends StatelessWidget {
         backgroundColor: Colors.green,
         centerTitle: true,
       ),
-      body: Center(
-        child: Card(
-          elevation: 8,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          color: Colors.white,
-          margin: EdgeInsets.symmetric(horizontal: 20, vertical: 50),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                CircleAvatar(
-                  radius: 50,
-                  backgroundImage:
-                      File(imagePath).existsSync()
-                          ? FileImage(
-                            File(imagePath),
-                          ) // If image exists, load it
-                          : AssetImage("assets/default_image.png")
-                              as ImageProvider, // Default image
-                ),
-
-                SizedBox(height: 20),
-                Text(
-                  "✅ Check-In Successful!",
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
+      body: SingleChildScrollView( // Wrap with SingleChildScrollView to avoid overflow
+        child: Center(
+          child: Card(
+            elevation: 8,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            color: Colors.white,
+            margin: EdgeInsets.symmetric(horizontal: 20, vertical: 50),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundImage: File(imagePath).existsSync()
+                        ? FileImage(File(imagePath)) // If image exists, load it
+                        : AssetImage("assets/default_image.png")
+                            as ImageProvider, // Default image
                   ),
-                ),
-                Divider(thickness: 1, color: Colors.grey.shade300),
-                SizedBox(height: 10),
-                infoRow("👤 Name", name),
-                infoRow("🆔 Employee ID", employeeId),
-                infoRow("⏰ Check-In Time", checkInTime),
-                infoRow("📅 Date", date),
-                SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.popUntil(context, (route) => route.isFirst);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                  SizedBox(height: 20),
+                  Text(
+                    "✅ Check-In Successful!",
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
                     ),
                   ),
-                  child: Text(
-                    "Go Back",
-                    style: TextStyle(fontSize: 18, color: Colors.white),
+                  Divider(thickness: 1, color: Colors.grey.shade300),
+                  SizedBox(height: 10),
+                  infoRow("👤 Name", name),
+                  infoRow("🆔 Employee ID", employeeId),
+                  infoRow("📍 Division", division),
+                  infoRow("⏰ Check-In Time", checkInTime),
+                  infoRow("📅 Date", date),
+                  SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.popUntil(context, (route) => route.isFirst);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: Text(
+                      "Go Back",
+                      style: TextStyle(fontSize: 18, color: Colors.white),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -104,12 +105,17 @@ class CheckInSuccessPage extends StatelessWidget {
               color: Colors.grey[700],
             ),
           ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.black,
+          // Instead of Expanded, use a flexible approach with overflow handling
+          Flexible(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+                overflow: TextOverflow.ellipsis, // Handling overflow gracefully
+              ),
+              maxLines: 1, // Ensuring one line for text
             ),
           ),
         ],

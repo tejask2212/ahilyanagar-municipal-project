@@ -166,6 +166,8 @@ class _RegisterWorkerScreenState extends State<RegisterWorkerScreen> {
       setState(() {
         faceVectorExists = data.containsKey("feature_vector");
         scannedWorkerId = workerId;
+        String division = data["division"] ?? "Not Specified";
+        print("Division: $division");
       });
 
       if (faceVectorExists) {
@@ -185,6 +187,9 @@ class _RegisterWorkerScreenState extends State<RegisterWorkerScreen> {
 
   String? mobileNumber = await promptForInput("Enter Mobile Number");
   if (mobileNumber == null || mobileNumber.isEmpty) return;
+
+  String? division = await promptForDivision();
+  if (division == null || division.isEmpty) return;
 
   img.Image? faceImage = await captureAndDetectFace();
   if (faceImage == null) {
@@ -219,6 +224,7 @@ class _RegisterWorkerScreenState extends State<RegisterWorkerScreen> {
     "worker_id": workerId,
     "name": workerName,
     "mobile": mobileNumber,
+    "division": division,
     "feature_vector": featureVector.join(','),
   }).then((_) {
     setState(() {
@@ -241,6 +247,38 @@ class _RegisterWorkerScreenState extends State<RegisterWorkerScreen> {
     );
   });
 }
+
+Future<String?> promptForDivision() async {
+  TextEditingController divisionController = TextEditingController();
+
+  return await showDialog<String>(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: Text("Enter Division"),
+        content: TextField(
+          controller: divisionController,
+          decoration: InputDecoration(hintText: "Enter Worker Division"),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context, divisionController.text.trim());
+            },
+            child: Text("OK"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context, null);
+            },
+            child: Text("Cancel"),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 
 Future<String?> promptForInput(String title) async {
     TextEditingController controller = TextEditingController();

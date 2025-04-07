@@ -9,6 +9,7 @@ class CheckInStatusPage extends StatelessWidget {
   final String? checkInTime;
   final String? date;
   final String? imagePath;
+  final String? division;
 
   CheckInStatusPage({
     required this.statusMessage,
@@ -18,6 +19,7 @@ class CheckInStatusPage extends StatelessWidget {
     this.checkInTime,
     this.date,
     this.imagePath,
+    this.division,
   });
 
   @override
@@ -34,6 +36,7 @@ class CheckInStatusPage extends StatelessWidget {
               employeeId: employeeId ?? "0000",
               checkInTime: checkInTime ?? "N/A",
               date: date ?? "N/A",
+              division: division ?? "N/A",
               imagePath: imagePath ?? "assets/default_image.png",
             ),
           ),

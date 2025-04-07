@@ -137,17 +137,7 @@ class _ScanPageState extends State<ScanPage> {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: Text("Face Not Registered"),
-            content: Text("No face record found. Please add a face."),
-            actions: [
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  await registerWorker(scannedWorkerId!);
-                },
-                child: Text("Add Face"),
-              ),
-            ],
+            title: Text("Worker Not Registered"),
           ),
     );
   }
@@ -189,8 +179,6 @@ class _ScanPageState extends State<ScanPage> {
       } else {
         showAddFaceDialog();
       }
-    } else {
-      await registerWorker(workerId);
     }
   }
 
@@ -278,6 +266,7 @@ class _ScanPageState extends State<ScanPage> {
 
     var workerData = workerEvent.snapshot.value as Map<dynamic, dynamic>;
     String workerName = workerData["name"];
+    String workerdivision = workerData["division"];
 
     if (isCheckIn) {
       DatabaseEvent event = await dateRef.child("check_in").once();
@@ -292,6 +281,7 @@ class _ScanPageState extends State<ScanPage> {
               isSuccess: true,
               name: workerName,
               employeeId: workerId,
+              division: workerdivision,
               checkInTime: formattedTime,
               date: formattedDate,
               imagePath: imagePath,
@@ -351,6 +341,7 @@ class _ScanPageState extends State<ScanPage> {
           builder: (context) => CheckOutSuccessPage(
             name: workerName,
             employeeId: workerId,
+            division: workerdivision,
             checkOutTime: formattedTime,
             date: formattedDate,
             imagePath: imagePath,
@@ -378,69 +369,6 @@ class _ScanPageState extends State<ScanPage> {
     }
     return dotProduct; // Already normalized
   }
-
-  Future<void> registerWorker(String workerId) async {
-  String? workerName = await promptForInput("Enter Worker Name");
-  if (workerName == null || workerName.isEmpty) return;
-
-  String? mobileNumber = await promptForInput("Enter Mobile Number");
-  if (mobileNumber == null || mobileNumber.isEmpty) return;
-
-  img.Image? faceImage = await captureAndDetectFace();
-  if (faceImage == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("No face detected. Please try again.")),
-    );
-    return;
-  }
-
-  if (_interpreter == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Model not loaded. Please try again later.")),
-    );
-    return;
-  }
-
-  List<double> featureVector = await compute(
-    extractFeatureVectorTopLevel,
-    FeatureExtractionData(faceImage: faceImage, interpreter: _interpreter!),
-  );
-
-  if (featureVector.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Feature extraction failed. Try again.")),
-    );
-    return;
-  }
-
-  DatabaseReference ref = FirebaseDatabase.instance.ref("workers/$workerId");
-
-  await ref.set({
-    "worker_id": workerId,
-    "name": workerName,
-    "mobile": mobileNumber,
-    "feature_vector": featureVector.join(','),
-  }).then((_) {
-    setState(() {
-      faceVectorExists = true;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("✅ Registration Successful!")),
-    );
-
-    // ✅ Delay for 2 seconds, then return to the home screen
-    Future.delayed(Duration(seconds: 2), () {
-      if (!mounted) return;
-      Navigator.pop(context); // Go back to the previous screen
-    });
-  }).catchError((error) {
-    print("Firebase Write Error: $error");
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("❌ Error storing worker data. Try again.")),
-    );
-  });
-}
 
 
   Future<String?> promptForInput(String title) async {
