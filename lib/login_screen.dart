@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'home_screen.dart';
 import 'signup_screen.dart';
 
@@ -16,11 +17,28 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void login() async {
     try {
-      await _auth.signInWithEmailAndPassword(
+      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
+
+      String emailKey = emailController.text.trim().replaceAll('.', ',');
+      DatabaseReference dbRef = FirebaseDatabase.instance.ref("officer_emails/$emailKey");
+
+      DatabaseEvent event = await dbRef.once();
+      if (event.snapshot.exists) {
+        String division = event.snapshot.value.toString();
+
+        // ✅ Pass division to home screen
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => HomeScreen(division: division),
+          ),
+        );
+      } else {
+        setState(() => errorMessage = "No division assigned to this officer.");
+      }
     } catch (e) {
       setState(() => errorMessage = "Invalid credentials! Please try again.");
     }

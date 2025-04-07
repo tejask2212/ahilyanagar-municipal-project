@@ -21,8 +21,9 @@ import 'package:flutter/foundation.dart'; // For using compute()
 
 class ScanPage extends StatefulWidget {
   final bool isCheckIn; // true for Check-In, false for Check-Out
+  final String officerDivision;
 
-  ScanPage({required this.isCheckIn});
+  ScanPage({required this.isCheckIn, required this.officerDivision});
 
   @override
   _ScanPageState createState() => _ScanPageState();
@@ -163,24 +164,34 @@ class _ScanPageState extends State<ScanPage> {
   }
 
   Future<void> checkWorkerData(String workerId) async {
-    DatabaseReference ref = FirebaseDatabase.instance.ref("workers/$workerId");
-    DatabaseEvent event = await ref.once();
+  DatabaseReference ref = FirebaseDatabase.instance.ref("workers/$workerId");
+  DatabaseEvent event = await ref.once();
 
-    if (event.snapshot.exists && event.snapshot.value != null) {
-      var data = event.snapshot.value as Map<dynamic, dynamic>;
+  if (event.snapshot.exists && event.snapshot.value != null) {
+    var data = event.snapshot.value as Map<dynamic, dynamic>;
 
-      setState(() {
-        faceVectorExists = data.containsKey("feature_vector");
-        scannedWorkerId = workerId;
-      });
+    String workerDivision = data["division"] ?? "";
+    if (workerDivision != widget.officerDivision) {
+      // Division mismatch - block attendance
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ This worker is not from your division.")),
+      );
+      return;
+    }
 
-      if (faceVectorExists) {
-        showFaceScanDialog();
-      } else {
-        showAddFaceDialog();
-      }
+    setState(() {
+      faceVectorExists = data.containsKey("feature_vector");
+      scannedWorkerId = workerId;
+    });
+
+    if (faceVectorExists) {
+      showFaceScanDialog();
+    } else {
+      showAddFaceDialog();
     }
   }
+}
+
 
   Future<void> scanFaceAndVerify() async {
   img.Image? capturedFace = await captureAndDetectFace();

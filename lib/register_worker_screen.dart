@@ -21,6 +21,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 class RegisterWorkerScreen extends StatefulWidget {
+  final String division;
+
+  RegisterWorkerScreen({required this.division});
   @override
   _RegisterWorkerScreenState createState() => _RegisterWorkerScreenState();
 }
@@ -125,6 +128,8 @@ class _RegisterWorkerScreenState extends State<RegisterWorkerScreen> {
       },
     );
   }
+
+  
 
   void showAddFaceDialog() {
     showDialog(
@@ -249,35 +254,51 @@ class _RegisterWorkerScreenState extends State<RegisterWorkerScreen> {
 }
 
 Future<String?> promptForDivision() async {
-  TextEditingController divisionController = TextEditingController();
+  List<String> divisions = ["Chhatrapati Sambhajinagar", "Satara", "Dhule", "Pune", "Khau Gali", "Sinhagad Road"]; // List of divisions
+  String? selectedDivision = divisions.first;
 
   return await showDialog<String>(
     context: context,
     builder: (context) {
-      return AlertDialog(
-        title: Text("Enter Division"),
-        content: TextField(
-          controller: divisionController,
-          decoration: InputDecoration(hintText: "Enter Worker Division"),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context, divisionController.text.trim());
-            },
-            child: Text("OK"),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context, null);
-            },
-            child: Text("Cancel"),
-          ),
-        ],
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text("Select Division"),
+            content: DropdownButton<String>(
+              value: selectedDivision,
+              onChanged: (String? newValue) {
+                setState(() {
+                  selectedDivision = newValue;
+                });
+              },
+              items: divisions.map<DropdownMenuItem<String>>((String division) {
+                return DropdownMenuItem<String>(
+                  value: division,
+                  child: Text(division),
+                );
+              }).toList(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context, selectedDivision);
+                },
+                child: Text("OK"),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context, null);
+                },
+                child: Text("Cancel"),
+              ),
+            ],
+          );
+        },
       );
     },
   );
 }
+
 
 
 Future<String?> promptForInput(String title) async {
