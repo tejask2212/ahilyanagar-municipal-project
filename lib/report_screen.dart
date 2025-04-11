@@ -6,14 +6,16 @@ import 'monthly_report_screen.dart';
 import 'worker_report_screen.dart';
 
 class ReportScreen extends StatelessWidget {
+  const ReportScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Attendance Report")),
+      appBar: AppBar(title: const Text("Attendance Report")),
       body: Column(
         children: [
           Container(
-            padding: EdgeInsets.all(20),
+            padding: const EdgeInsets.all(20),
             child: Image.asset(
               "assets/logo.png",
               height: 150,
@@ -54,57 +56,46 @@ class ReportScreen extends StatelessWidget {
     Color color,
   ) {
     return Padding(
-      padding: EdgeInsets.all(8.0),
+      padding: const EdgeInsets.all(8.0),
       child: Card(
         color: color,
         child: ListTile(
           leading: Icon(icon, color: Colors.white),
-          title: Text(title, style: TextStyle(color: Colors.white, fontSize: 18)),
-          subtitle: Text(subtitle, style: TextStyle(color: Colors.white70)),
+          title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18)),
+          subtitle: Text(subtitle, style: const TextStyle(color: Colors.white70)),
           onTap: () async {
-            if (title == "Show Monthly Report") {
-              String? division = await getUserDivision();
-              if (division == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Division not found for user.")),
-                );
-                return;
-              }
+            String? division = await getUserDivision();
+            if (division == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Division not found for user.")),
+              );
+              return;
+            }
 
+            if (title == "Show Monthly Report") {
               final DateTime? selectedDate = await showMonthYearPicker(context);
               if (selectedDate == null) return;
 
               final month = selectedDate.month;
               final year = selectedDate.year;
 
-              final workers = await fetchMonthlyAttendanceData(division, month, year);
-
-              int presentCount = workers.where((w) => w['status'] == 'present').length;
-              int absentCount = workers.where((w) => w['status'] == 'absent').length;
+              final summary = await fetchMonthlyAttendanceSummary(division, month, year);
 
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => MonthlyReportScreen(
-                    presentCount: presentCount,
-                    absentCount: absentCount,
+                    presentCount: summary.presentCount,
+                    absentCount: summary.absentCount,
+                    holidayCount: summary.holidayCount,
                   ),
                 ),
               );
             } else {
-              // ✅ Navigate to the WorkerReportScreen
-              String? division = await getUserDivision();
-              if (division == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Division not found for user.")),
-                );
-                return;
-              }
-
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => WorkerReportScreen(division: division),
+                  builder: (_) => WorkerReportScreen(division: division),
                 ),
               );
             }
@@ -114,7 +105,6 @@ class ReportScreen extends StatelessWidget {
     );
   }
 
-  /// Show a custom Month-Year picker using dropdowns
   Future<DateTime?> showMonthYearPicker(BuildContext context) async {
     int selectedMonth = DateTime.now().month;
     int selectedYear = DateTime.now().year;
@@ -123,7 +113,7 @@ class ReportScreen extends StatelessWidget {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Select Month and Year'),
+          title: const Text('Select Month and Year'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -153,13 +143,12 @@ class ReportScreen extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              child: Text('Cancel'),
+              child: const Text('Cancel'),
               onPressed: () => Navigator.pop(context),
             ),
             TextButton(
-              child: Text('OK'),
-              onPressed: () =>
-                  Navigator.pop(context, DateTime(selectedYear, selectedMonth)),
+              child: const Text('OK'),
+              onPressed: () => Navigator.pop(context, DateTime(selectedYear, selectedMonth)),
             ),
           ],
         );
@@ -167,7 +156,6 @@ class ReportScreen extends StatelessWidget {
     );
   }
 
-  /// Get the logged-in officer's division from Firebase
   Future<String?> getUserDivision() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
@@ -180,49 +168,100 @@ class ReportScreen extends StatelessWidget {
 
     return snapshot.snapshot.value?.toString();
   }
+}
 
-  /// Fetch attendance for a specific month and year
-  Future<List<Map<String, dynamic>>> fetchMonthlyAttendanceData(
-      String division, int month, int year) async {
-    final dbRef = FirebaseDatabase.instance.ref();
-    final workersSnapshot = await dbRef.child('workers').once();
+class AttendanceSummary {
+  final int presentCount;
+  final int absentCount;
+  final int holidayCount;
+  final double averagePercentage;
 
-    final workersData = workersSnapshot.snapshot.value as Map<dynamic, dynamic>;
+  AttendanceSummary({
+    required this.presentCount,
+    required this.absentCount,
+    required this.holidayCount,
+    required this.averagePercentage,
+  });
+}
 
-    List<Map<String, dynamic>> workersList = [];
+Future<AttendanceSummary> fetchMonthlyAttendanceSummary(String division, int month, int year) async {
+  final dbRef = FirebaseDatabase.instance.ref();
+  final holidaySnapshot = await dbRef.child('holidays').once();
+  final holidayData = holidaySnapshot.snapshot.value as Map?;
+  final holidayFormat = DateFormat('dd MMMM yyyy');
+  final workingFormat = DateFormat('dd MMM yyyy');
 
-    final dateFormat = DateFormat('dd MMM yyyy');
-
-    workersData.forEach((id, workerData) {
-      if (workerData['division'] == division) {
-        final attendance = Map<String, dynamic>.from(workerData['attendance'] ?? {});
-        bool isPresentInMonth = false;
-
-        attendance.forEach((dateStr, record) {
-          try {
-            DateTime date = dateFormat.parse(dateStr);
-            if (date.month == month && date.year == year) {
-              final checkIn = record['check_in'];
-              final checkOut = record['check_out'];
-
-              if ((checkIn != null && checkIn.toString().isNotEmpty) ||
-                  (checkOut != null && checkOut.toString().isNotEmpty)) {
-                isPresentInMonth = true;
-              }
-            }
-          } catch (e) {
-            // Skip any bad date format
-          }
-        });
-
-        workersList.add({
-          'name': workerData['name'],
-          'status': isPresentInMonth ? 'present' : 'absent',
-          'division': workerData['division'],
-        });
-      }
+  Set<String> holidayDates = {};
+  if (holidayData != null) {
+    holidayData.forEach((key, value) {
+      try {
+        final d = holidayFormat.parse(key);
+        if (d.month == month && d.year == year) {
+          holidayDates.add(workingFormat.format(d));
+        }
+      } catch (_) {}
     });
-
-    return workersList;
   }
+
+  final today = DateTime.now();
+final lastDayOfRange = (today.year == year && today.month == month)
+    ? today.day
+    : DateUtils.getDaysInMonth(year, month);
+
+final List<String> monthDates = List.generate(lastDayOfRange, (i) {
+  final date = DateTime(year, month, i + 1);
+  return workingFormat.format(date);
+});
+
+
+  final workingDays = monthDates.where((d) => !holidayDates.contains(d)).toList();
+  final holidayCount = holidayDates.length;
+
+  final workersSnapshot = await dbRef.child('workers').once();
+  final workersData = workersSnapshot.snapshot.value as Map?;
+  if (workersData == null) {
+    return AttendanceSummary(presentCount: 0, absentCount: 0, holidayCount: holidayCount, averagePercentage: 0);
+  }
+
+  int totalPresent = 0;
+  int totalAbsent = 0;
+  double totalPercentage = 0;
+  int workerCount = 0;
+
+  for (final entry in workersData.entries) {
+    final worker = entry.value;
+    if (worker['division'] == division) {
+      workerCount++;
+      final attendance = Map<String, dynamic>.from(worker['attendance'] ?? {});
+      int present = 0;
+
+      for (String date in workingDays) {
+        final record = attendance[date];
+        if (record != null) {
+          final checkIn = record['check_in'];
+          final checkOut = record['check_out'];
+          if (checkIn != null && checkIn.toString().isNotEmpty &&
+              checkOut != null && checkOut.toString().isNotEmpty) {
+            present++;
+          }
+        }
+      }
+
+      int workingDayCount = workingDays.length;
+      totalPresent += present;
+      totalAbsent += (workingDayCount - present);
+      if (workingDayCount > 0) {
+        totalPercentage += (present / workingDayCount) * 100;
+      }
+    }
+  }
+
+  double avgPercentage = workerCount == 0 ? 0 : totalPercentage / workerCount;
+
+  return AttendanceSummary(
+    presentCount: totalPresent,
+    absentCount: totalAbsent,
+    holidayCount: holidayCount,
+    averagePercentage: avgPercentage,
+  );
 }

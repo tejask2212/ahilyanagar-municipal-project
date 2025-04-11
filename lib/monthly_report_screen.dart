@@ -13,7 +13,7 @@ class MonthlyReportScreen extends StatefulWidget {
 
   MonthlyReportScreen({
     required this.presentCount,
-    required this.absentCount,
+    required this.absentCount, required int holidayCount,
   });
 
   @override

@@ -172,16 +172,15 @@ class _ScanPageState extends State<ScanPage> {
 
     String workerDivision = data["division"] ?? "";
     if (workerDivision != widget.officerDivision) {
-      // Division mismatch - block attendance
       Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => CheckInStatusPage(
-              statusMessage: "❌ Worker is not from your division",
-              isSuccess: false,
-            ),
+        context,
+        MaterialPageRoute(
+          builder: (context) => CheckInStatusPage(
+            statusMessage: "❌ Worker is not from your division",
+            isSuccess: false,
           ),
-        );
+        ),
+      );
       return;
     }
 
@@ -195,8 +194,19 @@ class _ScanPageState extends State<ScanPage> {
     } else {
       showAddFaceDialog();
     }
+  } else {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CheckInStatusPage(
+          statusMessage: "❌ Worker is not registered",
+          isSuccess: false,
+        ),
+      ),
+    );
   }
 }
+
 
 
   Future<void> scanFaceAndVerify() async {

@@ -39,6 +39,26 @@ class _WorkerCalendarScreenState extends State<WorkerCalendarScreen> {
 
   Future<void> fetchAttendance() async {
   final dbRef = FirebaseDatabase.instance.ref();
+  
+  // 1. Fetch holidays
+  final holidaySnapshot = await dbRef.child('holidays').once();
+  final holidaysData = holidaySnapshot.snapshot.value as Map?;
+  final dateFormat = DateFormat('dd MMM yyyy');
+  final holidayFormat = DateFormat('dd MMMM yyyy'); // Because your holidays use full month names
+
+  Set<DateTime> holidayDates = {};
+  if (holidaysData != null) {
+    holidaysData.forEach((key, value) {
+      try {
+        DateTime holidayDate = holidayFormat.parse(key);
+        holidayDates.add(DateTime(holidayDate.year, holidayDate.month, holidayDate.day));
+      } catch (e) {
+        print("Invalid holiday date: $key");
+      }
+    });
+  }
+
+  // 2. Fetch attendance
   final snapshot = await dbRef
       .child('workers')
       .child(widget.workerId)
@@ -46,8 +66,6 @@ class _WorkerCalendarScreenState extends State<WorkerCalendarScreen> {
       .once();
 
   final rawData = snapshot.snapshot.value as Map?;
-  final dateFormat = DateFormat('dd MMM yyyy');
-
   Map<DateTime, String> tempMap = {};
 
   if (rawData != null) {
@@ -56,16 +74,18 @@ class _WorkerCalendarScreenState extends State<WorkerCalendarScreen> {
         DateTime date = dateFormat.parse(dateStr);
         final normalizedDate = DateTime(date.year, date.month, date.day);
 
-        if (normalizedDate
-                .isAfter(widget.startDate.subtract(Duration(days: 1))) &&
+        if (normalizedDate.isAfter(widget.startDate.subtract(Duration(days: 1))) &&
             normalizedDate.isBefore(widget.endDate.add(Duration(days: 1)))) {
+          
+          if (holidayDates.contains(normalizedDate)) {
+            tempMap[normalizedDate] = 'holiday';
+            return;
+          }
+
           final checkIn = record['check_in'];
           final checkOut = record['check_out'];
-          final holiday = record['holiday'] ?? false;
 
-          if (holiday == true) {
-            tempMap[normalizedDate] = 'holiday';
-          } else if (checkIn != null &&
+          if (checkIn != null &&
               checkIn.toString().isNotEmpty &&
               (checkOut == null || checkOut.toString().isEmpty)) {
             tempMap[normalizedDate] = 'only_checkin';
@@ -82,6 +102,7 @@ class _WorkerCalendarScreenState extends State<WorkerCalendarScreen> {
     });
   }
 
+  // 3. Fill missing dates
   final today = DateTime.now();
   final todayNormalized = DateTime(today.year, today.month, today.day);
 
@@ -90,13 +111,13 @@ class _WorkerCalendarScreenState extends State<WorkerCalendarScreen> {
     final normalizedCurrent = DateTime(current.year, current.month, current.day);
 
     if (!tempMap.containsKey(normalizedCurrent)) {
-      if (normalizedCurrent.isAfter(todayNormalized)) {
+      if (holidayDates.contains(normalizedCurrent)) {
+        tempMap[normalizedCurrent] = 'holiday';
+      } else if (normalizedCurrent.isAfter(todayNormalized)) {
         // Future date - skip
       } else if (normalizedCurrent.isAtSameMomentAs(todayNormalized)) {
-        // Today with no record yet - show as only_checkin (black)
         tempMap[normalizedCurrent] = 'not confirmed';
       } else {
-        // Past day with no record - mark as absent (red)
         tempMap[normalizedCurrent] = 'absent';
       }
     }
@@ -109,6 +130,7 @@ class _WorkerCalendarScreenState extends State<WorkerCalendarScreen> {
     loading = false;
   });
 }
+
 
 
   Color getColorForStatus(String? status) {
@@ -236,7 +258,7 @@ class _WorkerCalendarScreenState extends State<WorkerCalendarScreen> {
         runSpacing: 8,
         children: [
           legendItem(Colors.green, "Present"),
-          legendItem(Colors.black, "Only Check-In"),
+          legendItem(Colors.black, "Not Confirmed"),
           legendItem(Colors.red, "Absent"),
           legendItem(Colors.orange, "Holiday"),
         ],
