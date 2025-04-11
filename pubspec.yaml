@@ -44,6 +44,9 @@ dependencies:
   intl: ^0.20.2
   fl_chart: ^0.63.0
   printing: ^5.11.0
+  table_calendar: ^3.0.9
+  shared_preferences: ^2.2.2
+
 
 
   # The following adds the Cupertino Icons font to your application.
@@ -62,6 +65,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  flutter_native_splash: ^2.3.9
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -78,6 +82,15 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/logo.png
+  android: true
+  ios: true
+  android_gravity: center
+  ios_content_mode: center
 
   # To add assets to your application, add an assets section, like this:
   # assets:

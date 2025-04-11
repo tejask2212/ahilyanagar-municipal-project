@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:intl/intl.dart';
 import 'monthly_report_screen.dart';
+import 'worker_report_screen.dart';
 
 class ReportScreen extends StatelessWidget {
   @override
@@ -91,7 +92,21 @@ class ReportScreen extends StatelessWidget {
                 ),
               );
             } else {
-              print("Navigate to another screen");
+              // ✅ Navigate to the WorkerReportScreen
+              String? division = await getUserDivision();
+              if (division == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Division not found for user.")),
+                );
+                return;
+              }
+
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => WorkerReportScreen(division: division),
+                ),
+              );
             }
           },
         ),
