@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'home_screen.dart';
 import 'signup_screen.dart';
+import 'super_admin_home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -17,24 +18,34 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void login() async {
     try {
+      final email = emailController.text.trim();
+      final password = passwordController.text.trim();
+
       UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-        email: emailController.text.trim(),
-        password: passwordController.text.trim(),
+        email: email,
+        password: password,
       );
 
-      String emailKey = emailController.text.trim().replaceAll('.', ',');
-      DatabaseReference dbRef = FirebaseDatabase.instance.ref("officer_emails/$emailKey");
+      final emailKey = email.replaceAll('.', ',');
+      final dbRef = FirebaseDatabase.instance.ref();
 
-      DatabaseEvent event = await dbRef.once();
-      if (event.snapshot.exists) {
-        String division = event.snapshot.value.toString();
-
-        // ✅ Pass division to home screen
+      // Check if super admin
+      final superAdminSnapshot = await dbRef.child('super_admins/$emailKey').once();
+      if (superAdminSnapshot.snapshot.exists) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (_) => HomeScreen(division: division),
-          ),
+          MaterialPageRoute(builder: (_) => SuperAdminHomeScreen()),
+        );
+        return;
+      }
+
+      // Else, check division officer
+      final divisionSnapshot = await dbRef.child('officer_emails/$emailKey').once();
+      if (divisionSnapshot.snapshot.exists) {
+        String division = divisionSnapshot.snapshot.value.toString();
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => HomeScreen(division: division)),
         );
       } else {
         setState(() => errorMessage = "No division assigned to this officer.");

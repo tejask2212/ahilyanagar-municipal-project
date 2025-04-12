@@ -6,7 +6,8 @@ import 'monthly_report_screen.dart';
 import 'worker_report_screen.dart';
 
 class ReportScreen extends StatelessWidget {
-  const ReportScreen({super.key});
+  final String? divisionOverride;
+  const ReportScreen({super.key, this.divisionOverride});
 
   @override
   Widget build(BuildContext context) {
@@ -61,25 +62,24 @@ class ReportScreen extends StatelessWidget {
         color: color,
         child: ListTile(
           leading: Icon(icon, color: Colors.white),
-          title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18)),
-          subtitle: Text(subtitle, style: const TextStyle(color: Colors.white70)),
+          title: Text(title,
+              style: const TextStyle(color: Colors.white, fontSize: 18)),
+          subtitle:
+              Text(subtitle, style: const TextStyle(color: Colors.white70)),
           onTap: () async {
-            String? division = await getUserDivision();
-            if (division == null) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Division not found for user.")),
-              );
-              return;
-            }
+            String? division = divisionOverride ?? await getUserDivision();
+            bool isSuperAdmin = await checkIfSuperAdmin();
 
             if (title == "Show Monthly Report") {
               final DateTime? selectedDate = await showMonthYearPicker(context);
-              if (selectedDate == null) return;
+              if (selectedDate == null || (division == null && !isSuperAdmin)) return;
 
-              final month = selectedDate.month;
-              final year = selectedDate.year;
-
-              final summary = await fetchMonthlyAttendanceSummary(division, month, year);
+              final summary = await fetchMonthlyAttendanceSummary(
+                division,
+                selectedDate.month,
+                selectedDate.year,
+                isSuperAdmin,
+              );
 
               Navigator.push(
                 context,
@@ -95,7 +95,10 @@ class ReportScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => WorkerReportScreen(division: division),
+                  builder: (_) => WorkerReportScreen(
+                    division: division,
+                    isSuperAdmin: isSuperAdmin,
+                  ),
                 ),
               );
             }
@@ -109,51 +112,44 @@ class ReportScreen extends StatelessWidget {
     int selectedMonth = DateTime.now().month;
     int selectedYear = DateTime.now().year;
 
-    return await showDialog<DateTime>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Select Month and Year'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButton<int>(
-                value: selectedMonth,
-                items: List.generate(12, (index) {
-                  return DropdownMenuItem(
-                    value: index + 1,
-                    child: Text(DateFormat.MMMM().format(DateTime(0, index + 1))),
-                  );
-                }),
-                onChanged: (value) {
-                  if (value != null) selectedMonth = value;
-                },
+    return await showDialog<DateTime>(context: context, builder: (context) {
+      return AlertDialog(
+        title: const Text('Select Month and Year'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButton<int>(
+              value: selectedMonth,
+              items: List.generate(
+                12,
+                (index) => DropdownMenuItem(
+                  value: index + 1,
+                  child: Text(DateFormat.MMMM().format(DateTime(0, index + 1))),
+                ),
               ),
-              DropdownButton<int>(
-                value: selectedYear,
-                items: List.generate(5, (index) {
-                  int year = DateTime.now().year - 2 + index;
-                  return DropdownMenuItem(value: year, child: Text('$year'));
-                }),
-                onChanged: (value) {
-                  if (value != null) selectedYear = value;
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () => Navigator.pop(context),
+              onChanged: (value) => selectedMonth = value!,
             ),
-            TextButton(
-              child: const Text('OK'),
-              onPressed: () => Navigator.pop(context, DateTime(selectedYear, selectedMonth)),
+            DropdownButton<int>(
+              value: selectedYear,
+              items: List.generate(5, (index) {
+                int year = DateTime.now().year - 2 + index;
+                return DropdownMenuItem(value: year, child: Text('$year'));
+              }),
+              onChanged: (value) => selectedYear = value!,
             ),
           ],
-        );
-      },
-    );
+        ),
+        actions: [
+          TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.pop(context)),
+          TextButton(
+              child: const Text('OK'),
+              onPressed: () => Navigator.pop(
+                  context, DateTime(selectedYear, selectedMonth))),
+        ],
+      );
+    });
   }
 
   Future<String?> getUserDivision() async {
@@ -164,9 +160,25 @@ class ReportScreen extends StatelessWidget {
     if (email == null) return null;
 
     final dbRef = FirebaseDatabase.instance.ref();
-    final snapshot = await dbRef.child('officer_emails').child(email).once();
+    final superAdminSnapshot =
+        await dbRef.child('super_admins').child(email).once();
+    if (superAdminSnapshot.snapshot.exists) return null;
 
+    final snapshot = await dbRef.child('officer_emails').child(email).once();
     return snapshot.snapshot.value?.toString();
+  }
+
+  Future<bool> checkIfSuperAdmin() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+
+    final email = user.email?.replaceAll('.', ',');
+    if (email == null) return false;
+
+    final dbRef = FirebaseDatabase.instance.ref();
+    final superAdminSnapshot =
+        await dbRef.child('super_admins').child(email).once();
+    return superAdminSnapshot.snapshot.exists;
   }
 }
 
@@ -184,7 +196,8 @@ class AttendanceSummary {
   });
 }
 
-Future<AttendanceSummary> fetchMonthlyAttendanceSummary(String division, int month, int year) async {
+Future<AttendanceSummary> fetchMonthlyAttendanceSummary(
+    String? division, int month, int year, bool isSuperAdmin) async {
   final dbRef = FirebaseDatabase.instance.ref();
   final holidaySnapshot = await dbRef.child('holidays').once();
   final holidayData = holidaySnapshot.snapshot.value as Map?;
@@ -204,23 +217,27 @@ Future<AttendanceSummary> fetchMonthlyAttendanceSummary(String division, int mon
   }
 
   final today = DateTime.now();
-final lastDayOfRange = (today.year == year && today.month == month)
-    ? today.day
-    : DateUtils.getDaysInMonth(year, month);
+  final lastDayOfRange = (today.year == year && today.month == month)
+      ? today.day
+      : DateUtils.getDaysInMonth(year, month);
 
-final List<String> monthDates = List.generate(lastDayOfRange, (i) {
-  final date = DateTime(year, month, i + 1);
-  return workingFormat.format(date);
-});
+  final List<String> monthDates = List.generate(lastDayOfRange, (i) {
+    final date = DateTime(year, month, i + 1);
+    return workingFormat.format(date);
+  });
 
-
-  final workingDays = monthDates.where((d) => !holidayDates.contains(d)).toList();
+  final workingDays =
+      monthDates.where((d) => !holidayDates.contains(d)).toList();
   final holidayCount = holidayDates.length;
 
   final workersSnapshot = await dbRef.child('workers').once();
   final workersData = workersSnapshot.snapshot.value as Map?;
   if (workersData == null) {
-    return AttendanceSummary(presentCount: 0, absentCount: 0, holidayCount: holidayCount, averagePercentage: 0);
+    return AttendanceSummary(
+        presentCount: 0,
+        absentCount: 0,
+        holidayCount: holidayCount,
+        averagePercentage: 0);
   }
 
   int totalPresent = 0;
@@ -230,7 +247,9 @@ final List<String> monthDates = List.generate(lastDayOfRange, (i) {
 
   for (final entry in workersData.entries) {
     final worker = entry.value;
-    if (worker['division'] == division) {
+
+    // For Super Admin, no division filter, otherwise filter by division
+    if (isSuperAdmin || worker['division'] == division) {
       workerCount++;
       final attendance = Map<String, dynamic>.from(worker['attendance'] ?? {});
       int present = 0;
@@ -240,8 +259,10 @@ final List<String> monthDates = List.generate(lastDayOfRange, (i) {
         if (record != null) {
           final checkIn = record['check_in'];
           final checkOut = record['check_out'];
-          if (checkIn != null && checkIn.toString().isNotEmpty &&
-              checkOut != null && checkOut.toString().isNotEmpty) {
+          if (checkIn != null &&
+              checkIn.toString().isNotEmpty &&
+              checkOut != null &&
+              checkOut.toString().isNotEmpty) {
             present++;
           }
         }

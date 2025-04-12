@@ -4,8 +4,10 @@ import 'package:firebase_database/firebase_database.dart';
 import 'worker_calendar_screen.dart';
 
 class WorkerReportScreen extends StatefulWidget {
-  final String division;
-  WorkerReportScreen({required this.division});
+  final String? division;
+  final bool isSuperAdmin;
+
+  WorkerReportScreen({this.division, this.isSuperAdmin = false});
 
   @override
   _WorkerReportScreenState createState() => _WorkerReportScreenState();
@@ -31,7 +33,7 @@ class _WorkerReportScreenState extends State<WorkerReportScreen> {
     List<Map<String, dynamic>> filtered = [];
 
     data.forEach((key, value) {
-      if (value['division'] == widget.division) {
+      if (widget.division == null || value['division']?.trim() == widget.division?.trim()) {
         filtered.add({'id': key, 'name': value['name']});
       }
     });

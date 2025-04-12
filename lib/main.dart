@@ -4,7 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'login_screen.dart';
 import 'home_screen.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'SplashScreen.dart'; // ✅ Import your custom splash screen
+import 'SplashScreen.dart';
+import 'super_admin_home_screen.dart'; // ✅ Import your super admin screen
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,11 +37,16 @@ class AuthWrapper extends StatelessWidget {
               future: getUserDivision(snapshot.data!.uid),
               builder: (context, divisionSnapshot) {
                 if (divisionSnapshot.connectionState == ConnectionState.waiting) {
-                  return const SplashScreen(); // ✅ Custom splash instead of spinner
+                  return const SplashScreen();
                 } else if (divisionSnapshot.hasError) {
                   return Center(child: Text("Error: ${divisionSnapshot.error}"));
                 } else if (divisionSnapshot.hasData) {
-                  return HomeScreen(division: divisionSnapshot.data!);
+                  final division = divisionSnapshot.data!;
+                  if (division == 'SUPER_ADMIN') {
+                    return SuperAdminHomeScreen(); // ✅ Show super admin screen
+                  } else {
+                    return HomeScreen(division: division);
+                  }
                 } else {
                   return Center(child: Text("No division data found"));
                 }
@@ -51,24 +57,31 @@ class AuthWrapper extends StatelessWidget {
           }
         }
 
-        // ✅ Show splash screen during initial auth check
         return const SplashScreen();
       },
     );
   }
 
   Future<String> getUserDivision(String uid) async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return 'Unknown Division';
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return 'Unknown Division';
 
-  final safeEmail = user.email!.replaceAll('.', ',');
-  DatabaseReference ref = FirebaseDatabase.instance.ref("officer_emails/$safeEmail");
-  DatabaseEvent event = await ref.once();
+    final safeEmail = user.email!.replaceAll('.', ',');
 
-  if (event.snapshot.exists && event.snapshot.value != null) {
-    return event.snapshot.value as String;
-  } else {
-    return 'Default Division';
+    // ✅ Check if the user is a Super Admin
+    DatabaseReference superAdminRef = FirebaseDatabase.instance.ref("super_admins/$safeEmail");
+    DatabaseEvent superAdminEvent = await superAdminRef.once();
+    if (superAdminEvent.snapshot.exists) {
+      return 'SUPER_ADMIN';
+    }
+
+    // ✅ Otherwise check division
+    DatabaseReference officerRef = FirebaseDatabase.instance.ref("officer_emails/$safeEmail");
+    DatabaseEvent officerEvent = await officerRef.once();
+    if (officerEvent.snapshot.exists && officerEvent.snapshot.value != null) {
+      return officerEvent.snapshot.value as String;
+    } else {
+      return 'Default Division';
+    }
   }
-}
 }
