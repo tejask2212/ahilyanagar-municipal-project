@@ -46,6 +46,7 @@ dependencies:
   printing: ^5.11.0
   table_calendar: ^3.0.9
   shared_preferences: ^2.2.2
+  geolocator: ^10.1.0
 
 
 
