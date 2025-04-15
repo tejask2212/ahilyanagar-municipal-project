@@ -4,6 +4,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:intl/intl.dart';
 import 'monthly_report_screen.dart';
 import 'worker_report_screen.dart';
+import 'daily_report_screen.dart';
 
 class ReportScreen extends StatelessWidget {
   final String? divisionOverride;
@@ -41,6 +42,13 @@ class ReportScreen extends StatelessWidget {
                   Icons.summarize,
                   Colors.green,
                 ),
+                buildTile(
+                  context,
+                  "View Daily Report",
+                  "Check daily attendance summary.",
+                  Icons.today,
+                  Colors.orange,
+                ),
               ],
             ),
           ),
@@ -50,106 +58,149 @@ class ReportScreen extends StatelessWidget {
   }
 
   Widget buildTile(
-    BuildContext context,
-    String title,
-    String subtitle,
-    IconData icon,
-    Color color,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Card(
-        color: color,
+  BuildContext context,
+  String title,
+  String subtitle,
+  IconData icon,
+  Color color,
+) {
+  return Padding(
+    padding: const EdgeInsets.all(8.0),
+    child: Card(
+      color: color,
+      child: GestureDetector(
+        onTap: () async {
+          String? division = divisionOverride ?? await getUserDivision();
+          bool isSuperAdmin = await checkIfSuperAdmin();
+
+          if (title == "Show Monthly Report") {
+  final DateTime? selectedDate = await showMonthYearPicker(context);
+  if (selectedDate == null) return;
+
+  String? selectedDivision = division;
+  
+  if (isSuperAdmin) {
+    selectedDivision = await showDivisionPickerWithAverageOption(context);
+    if (selectedDivision == null) return;
+  }
+
+  final summary = await fetchMonthlyAttendanceSummary(
+    selectedDivision == "ALL_DIVISIONS_AVERAGE" ? null : selectedDivision,
+    selectedDate.month,
+    selectedDate.year,
+    isSuperAdmin && selectedDivision == "ALL_DIVISIONS_AVERAGE",
+  );
+
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => MonthlyReportScreen(
+        presentCount: summary.presentCount,
+        absentCount: summary.absentCount,
+        holidayCount: summary.holidayCount,
+      ),
+    ),
+  );
+}
+ else if (title == "Show Workers") {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => WorkerReportScreen(
+                  division: division,
+                  isSuperAdmin: isSuperAdmin,
+                ),
+              ),
+            );
+          } else if (title == "View Daily Report") {
+            if (isSuperAdmin) {
+              final selectedDivision = await showDivisionPicker(context);
+              if (selectedDivision == null) return;
+              division = selectedDivision;
+            }
+
+            final selectedDate = await showDatePicker(
+              context: context,
+              initialDate: DateTime.now().subtract(const Duration(days: 1)),
+              firstDate: DateTime(2020),
+              lastDate: DateTime.now().subtract(const Duration(days: 1)),
+            );
+
+            if (selectedDate == null || division == null) return;
+
+            final report = await fetchDailyAttendanceSummary(division, selectedDate);
+
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DailyReportScreen(
+                  date: selectedDate,
+                  division: division!,
+                  present: report['present']!,
+                  absent: report['absent']!,
+                  notConfirmed: report['not_confirmed']!,
+                ),
+              ),
+            );
+          }
+        },
         child: ListTile(
           leading: Icon(icon, color: Colors.white),
           title: Text(title,
               style: const TextStyle(color: Colors.white, fontSize: 18)),
           subtitle:
               Text(subtitle, style: const TextStyle(color: Colors.white70)),
-          onTap: () async {
-            String? division = divisionOverride ?? await getUserDivision();
-            bool isSuperAdmin = await checkIfSuperAdmin();
-
-            if (title == "Show Monthly Report") {
-              final DateTime? selectedDate = await showMonthYearPicker(context);
-              if (selectedDate == null || (division == null && !isSuperAdmin)) return;
-
-              final summary = await fetchMonthlyAttendanceSummary(
-                division,
-                selectedDate.month,
-                selectedDate.year,
-                isSuperAdmin,
-              );
-
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => MonthlyReportScreen(
-                    presentCount: summary.presentCount,
-                    absentCount: summary.absentCount,
-                    holidayCount: summary.holidayCount,
-                  ),
-                ),
-              );
-            } else {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => WorkerReportScreen(
-                    division: division,
-                    isSuperAdmin: isSuperAdmin,
-                  ),
-                ),
-              );
-            }
-          },
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Future<DateTime?> showMonthYearPicker(BuildContext context) async {
     int selectedMonth = DateTime.now().month;
     int selectedYear = DateTime.now().year;
 
-    return await showDialog<DateTime>(context: context, builder: (context) {
-      return AlertDialog(
-        title: const Text('Select Month and Year'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButton<int>(
-              value: selectedMonth,
-              items: List.generate(
-                12,
-                (index) => DropdownMenuItem(
-                  value: index + 1,
-                  child: Text(DateFormat.MMMM().format(DateTime(0, index + 1))),
+    return await showDialog<DateTime>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Select Month and Year'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButton<int>(
+                value: selectedMonth,
+                items: List.generate(
+                  12,
+                  (index) => DropdownMenuItem(
+                    value: index + 1,
+                    child: Text(DateFormat.MMMM().format(DateTime(0, index + 1))),
+                  ),
                 ),
+                onChanged: (value) => selectedMonth = value!,
               ),
-              onChanged: (value) => selectedMonth = value!,
-            ),
-            DropdownButton<int>(
-              value: selectedYear,
-              items: List.generate(5, (index) {
-                int year = DateTime.now().year - 2 + index;
-                return DropdownMenuItem(value: year, child: Text('$year'));
-              }),
-              onChanged: (value) => selectedYear = value!,
-            ),
+              DropdownButton<int>(
+                value: selectedYear,
+                items: List.generate(5, (index) {
+                  int year = DateTime.now().year - 2 + index;
+                  return DropdownMenuItem(value: year, child: Text('$year'));
+                }),
+                onChanged: (value) => selectedYear = value!,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                child: const Text('Cancel'),
+                onPressed: () => Navigator.pop(context)),
+            TextButton(
+                child: const Text('OK'),
+                onPressed: () => Navigator.pop(
+                    context, DateTime(selectedYear, selectedMonth))),
           ],
-        ),
-        actions: [
-          TextButton(
-              child: const Text('Cancel'),
-              onPressed: () => Navigator.pop(context)),
-          TextButton(
-              child: const Text('OK'),
-              onPressed: () => Navigator.pop(
-                  context, DateTime(selectedYear, selectedMonth))),
-        ],
-      );
-    });
+        );
+      },
+    );
   }
 
   Future<String?> getUserDivision() async {
@@ -197,7 +248,11 @@ class AttendanceSummary {
 }
 
 Future<AttendanceSummary> fetchMonthlyAttendanceSummary(
-    String? division, int month, int year, bool isSuperAdmin) async {
+  String? division,
+  int month,
+  int year,
+  bool isSuperAdmin,
+) async {
   final dbRef = FirebaseDatabase.instance.ref();
   final holidaySnapshot = await dbRef.child('holidays').once();
   final holidayData = holidaySnapshot.snapshot.value as Map?;
@@ -234,10 +289,11 @@ Future<AttendanceSummary> fetchMonthlyAttendanceSummary(
   final workersData = workersSnapshot.snapshot.value as Map?;
   if (workersData == null) {
     return AttendanceSummary(
-        presentCount: 0,
-        absentCount: 0,
-        holidayCount: holidayCount,
-        averagePercentage: 0);
+      presentCount: 0,
+      absentCount: 0,
+      holidayCount: holidayCount,
+      averagePercentage: 0,
+    );
   }
 
   int totalPresent = 0;
@@ -248,7 +304,6 @@ Future<AttendanceSummary> fetchMonthlyAttendanceSummary(
   for (final entry in workersData.entries) {
     final worker = entry.value;
 
-    // For Super Admin, no division filter, otherwise filter by division
     if (isSuperAdmin || worker['division'] == division) {
       workerCount++;
       final attendance = Map<String, dynamic>.from(worker['attendance'] ?? {});
@@ -277,7 +332,8 @@ Future<AttendanceSummary> fetchMonthlyAttendanceSummary(
     }
   }
 
-  double avgPercentage = workerCount == 0 ? 0 : totalPercentage / workerCount;
+  double avgPercentage =
+      workerCount == 0 ? 0 : totalPercentage / workerCount;
 
   return AttendanceSummary(
     presentCount: totalPresent,
@@ -286,3 +342,144 @@ Future<AttendanceSummary> fetchMonthlyAttendanceSummary(
     averagePercentage: avgPercentage,
   );
 }
+
+Future<Map<String, int>> fetchDailyAttendanceSummary(
+    String division, DateTime date) async {
+  final dbRef = FirebaseDatabase.instance.ref();
+  final workersSnapshot = await dbRef.child('workers').once();
+  final workersData = workersSnapshot.snapshot.value as Map?;
+  if (workersData == null) return {'present': 0, 'absent': 0, 'not_confirmed': 0};
+
+  final workingFormat = DateFormat('dd MMM yyyy');
+  final formattedDate = workingFormat.format(date);
+
+  int present = 0;
+  int absent = 0;
+  int notConfirmed = 0;
+
+  for (final entry in workersData.entries) {
+    final worker = entry.value;
+
+    if (worker['division'] == division) {
+      final attendance = Map<String, dynamic>.from(worker['attendance'] ?? {});
+      final record = attendance[formattedDate];
+
+      if (record == null) {
+        absent++;
+      } else {
+        final checkIn = record['check_in'];
+        final checkOut = record['check_out'];
+
+        final hasCheckIn = checkIn?.toString().isNotEmpty ?? false;
+        final hasCheckOut = checkOut?.toString().isNotEmpty ?? false;
+
+        if (hasCheckIn && hasCheckOut) {
+          present++;
+        } else {
+          notConfirmed++;
+        }
+      }
+    }
+  }
+
+  return {
+    'present': present,
+    'absent': absent,
+    'not_confirmed': notConfirmed,
+  };
+}
+
+Future<String?> showDivisionPicker(BuildContext context) async {
+  final dbRef = FirebaseDatabase.instance.ref();
+  final officerEmailsSnapshot = await dbRef.child('officer_emails').once();
+  final officerEmails = officerEmailsSnapshot.snapshot.value as Map?;
+
+  if (officerEmails == null || officerEmails.isEmpty) {
+    print("No divisions found in the database.");
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Error"),
+          content: const Text("No divisions found in the database."),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+    return null;
+  }
+
+  final divisionList = officerEmails.values.toSet().toList(); // Getting unique divisions
+  print("Division list: $divisionList");
+
+  return await showDialog<String>(
+    context: context,
+    builder: (context) {
+      return SimpleDialog(
+        title: const Text("Select Division"),
+        children: divisionList
+            .map((division) => SimpleDialogOption(
+                  onPressed: () {
+                    print("Selected division: $division");
+                    Navigator.pop(context, division);
+                  },
+                  child: Text(division),
+                ))
+            .toList(),
+      );
+    },
+  );
+}
+
+Future<String?> showDivisionPickerWithAverageOption(BuildContext context) async {
+  final dbRef = FirebaseDatabase.instance.ref();
+  final officerEmailsSnapshot = await dbRef.child('officer_emails').once();
+  final officerEmails = officerEmailsSnapshot.snapshot.value as Map?;
+
+  if (officerEmails == null || officerEmails.isEmpty) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Error"),
+          content: const Text("No divisions found in the database."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+    return null;
+  }
+
+  final divisionList = officerEmails.values.toSet().toList()..sort();
+  divisionList.insert(0, "All Divisions (Average)");
+
+  return await showDialog<String>(
+    context: context,
+    builder: (context) {
+      return SimpleDialog(
+        title: const Text("Select Division"),
+        children: divisionList.map((division) {
+          final value = division == "All Divisions (Average)" ? "ALL_DIVISIONS_AVERAGE" : division;
+          return SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, value),
+            child: Text(division),
+          );
+        }).toList(),
+      );
+    },
+  );
+}
+
+
