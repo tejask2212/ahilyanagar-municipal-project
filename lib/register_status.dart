@@ -8,7 +8,6 @@ class RegisterStatus extends StatelessWidget {
   final bool isSuccess;
   final String? name;
   final String? employeeId;
-  final String? checkInTime;
   final String? date;
   final String? imagePath;
   final String? division;
@@ -18,7 +17,6 @@ class RegisterStatus extends StatelessWidget {
     required this.isSuccess,
     this.name,
     this.employeeId,
-    this.checkInTime,
     this.date,
     this.imagePath,
     this.division,
@@ -36,7 +34,6 @@ class RegisterStatus extends StatelessWidget {
             builder: (context) => RegisterSuccess(
               name: name ?? "Unknown", // ✅ Provide default values
               employeeId: employeeId ?? "0000",
-              checkInTime: checkInTime ?? "N/A",
               date: date ?? "N/A",
               division: division ?? "N/A",
               imagePath: imagePath ?? "assets/default_image.png",

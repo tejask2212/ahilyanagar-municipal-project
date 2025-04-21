@@ -58,103 +58,106 @@ class ReportScreen extends StatelessWidget {
   }
 
   Widget buildTile(
-  BuildContext context,
-  String title,
-  String subtitle,
-  IconData icon,
-  Color color,
-) {
-  return Padding(
-    padding: const EdgeInsets.all(8.0),
-    child: Card(
-      color: color,
-      child: GestureDetector(
-        onTap: () async {
-          String? division = divisionOverride ?? await getUserDivision();
-          bool isSuperAdmin = await checkIfSuperAdmin();
+    BuildContext context,
+    String title,
+    String subtitle,
+    IconData icon,
+    Color color,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Card(
+        color: color,
+        child: GestureDetector(
+          onTap: () async {
+            String? division = divisionOverride ?? await getUserDivision();
+            bool isSuperAdmin = await checkIfSuperAdmin();
 
-          if (title == "Show Monthly Report") {
-  final DateTime? selectedDate = await showMonthYearPicker(context);
-  if (selectedDate == null) return;
+            if (title == "Show Monthly Report") {
+              final DateTime? selectedDate = await showMonthYearPicker(context);
+              if (selectedDate == null) return;
 
-  String? selectedDivision = division;
-  
-  if (isSuperAdmin) {
-    selectedDivision = await showDivisionPickerWithAverageOption(context);
-    if (selectedDivision == null) return;
-  }
+              String? selectedDivision = division;
 
-  final summary = await fetchMonthlyAttendanceSummary(
-    selectedDivision == "ALL_DIVISIONS_AVERAGE" ? null : selectedDivision,
-    selectedDate.month,
-    selectedDate.year,
-    isSuperAdmin && selectedDivision == "ALL_DIVISIONS_AVERAGE",
-  );
+              if (isSuperAdmin) {
+                selectedDivision =
+                    await showDivisionPickerWithAverageOption(context);
+                if (selectedDivision == null) return;
+              }
 
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => MonthlyReportScreen(
-        presentCount: summary.presentCount,
-        absentCount: summary.absentCount,
-        holidayCount: summary.holidayCount,
-      ),
-    ),
-  );
-}
- else if (title == "Show Workers") {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => WorkerReportScreen(
-                  division: division,
-                  isSuperAdmin: isSuperAdmin,
+              final summary = await fetchMonthlyAttendanceSummary(
+                selectedDivision == "ALL_DIVISIONS_AVERAGE"
+                    ? null
+                    : selectedDivision,
+                selectedDate.month,
+                selectedDate.year,
+                isSuperAdmin && selectedDivision == "ALL_DIVISIONS_AVERAGE",
+              );
+
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => MonthlyReportScreen(
+                    presentCount: summary.presentCount,
+                    absentCount: summary.absentCount,
+                    holidayCount: summary.holidayCount,
+                  ),
                 ),
-              ),
-            );
-          } else if (title == "View Daily Report") {
-            if (isSuperAdmin) {
-              final selectedDivision = await showDivisionPicker(context);
-              if (selectedDivision == null) return;
-              division = selectedDivision;
+              );
+            } else if (title == "Show Workers") {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => WorkerReportScreen(
+                    division: division,
+                    isSuperAdmin: isSuperAdmin,
+                  ),
+                ),
+              );
+            } else if (title == "View Daily Report") {
+              if (isSuperAdmin) {
+                final selectedDivision = await showDivisionPicker(context);
+                if (selectedDivision == null) return;
+                division = selectedDivision;
+              }
+
+              final selectedDate = await showDatePicker(
+                context: context,
+                initialDate: DateTime.now().subtract(const Duration(days: 1)),
+                firstDate: DateTime(2020),
+                lastDate: DateTime.now().subtract(const Duration(days: 1)),
+              );
+
+              if (selectedDate == null || division == null) return;
+
+              final report =
+                  await fetchDailyAttendanceSummary(division, selectedDate);
+
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DailyReportScreen(
+                    date: selectedDate,
+                    division: division!,
+                    present: report['present']!,
+                    absent: report['absent']!,
+                    notConfirmed: report['not_confirmed']!,
+                  ),
+                ),
+              );
             }
-
-            final selectedDate = await showDatePicker(
-              context: context,
-              initialDate: DateTime.now().subtract(const Duration(days: 1)),
-              firstDate: DateTime(2020),
-              lastDate: DateTime.now().subtract(const Duration(days: 1)),
-            );
-
-            if (selectedDate == null || division == null) return;
-
-            final report = await fetchDailyAttendanceSummary(division, selectedDate);
-
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => DailyReportScreen(
-                  date: selectedDate,
-                  division: division!,
-                  present: report['present']!,
-                  absent: report['absent']!,
-                  notConfirmed: report['not_confirmed']!,
-                ),
-              ),
-            );
-          }
-        },
-        child: ListTile(
-          leading: Icon(icon, color: Colors.white),
-          title: Text(title,
-              style: const TextStyle(color: Colors.white, fontSize: 18)),
-          subtitle:
-              Text(subtitle, style: const TextStyle(color: Colors.white70)),
+          },
+          child: ListTile(
+            leading: Icon(icon, color: Colors.white),
+            title: Text(title,
+                style: const TextStyle(color: Colors.white, fontSize: 18)),
+            subtitle:
+                Text(subtitle, style: const TextStyle(color: Colors.white70)),
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Future<DateTime?> showMonthYearPicker(BuildContext context) async {
     int selectedMonth = DateTime.now().month;
@@ -174,7 +177,8 @@ class ReportScreen extends StatelessWidget {
                   12,
                   (index) => DropdownMenuItem(
                     value: index + 1,
-                    child: Text(DateFormat.MMMM().format(DateTime(0, index + 1))),
+                    child:
+                        Text(DateFormat.MMMM().format(DateTime(0, index + 1))),
                   ),
                 ),
                 onChanged: (value) => selectedMonth = value!,
@@ -332,8 +336,7 @@ Future<AttendanceSummary> fetchMonthlyAttendanceSummary(
     }
   }
 
-  double avgPercentage =
-      workerCount == 0 ? 0 : totalPercentage / workerCount;
+  double avgPercentage = workerCount == 0 ? 0 : totalPercentage / workerCount;
 
   return AttendanceSummary(
     presentCount: totalPresent,
@@ -348,7 +351,8 @@ Future<Map<String, int>> fetchDailyAttendanceSummary(
   final dbRef = FirebaseDatabase.instance.ref();
   final workersSnapshot = await dbRef.child('workers').once();
   final workersData = workersSnapshot.snapshot.value as Map?;
-  if (workersData == null) return {'present': 0, 'absent': 0, 'not_confirmed': 0};
+  if (workersData == null)
+    return {'present': 0, 'absent': 0, 'not_confirmed': 0};
 
   final workingFormat = DateFormat('dd MMM yyyy');
   final formattedDate = workingFormat.format(date);
@@ -416,7 +420,8 @@ Future<String?> showDivisionPicker(BuildContext context) async {
     return null;
   }
 
-  final divisionList = officerEmails.values.toSet().toList(); // Getting unique divisions
+  final divisionList =
+      officerEmails.values.toSet().toList(); // Getting unique divisions
   print("Division list: $divisionList");
 
   return await showDialog<String>(
@@ -438,7 +443,8 @@ Future<String?> showDivisionPicker(BuildContext context) async {
   );
 }
 
-Future<String?> showDivisionPickerWithAverageOption(BuildContext context) async {
+Future<String?> showDivisionPickerWithAverageOption(
+    BuildContext context) async {
   final dbRef = FirebaseDatabase.instance.ref();
   final officerEmailsSnapshot = await dbRef.child('officer_emails').once();
   final officerEmails = officerEmailsSnapshot.snapshot.value as Map?;
@@ -471,7 +477,9 @@ Future<String?> showDivisionPickerWithAverageOption(BuildContext context) async 
       return SimpleDialog(
         title: const Text("Select Division"),
         children: divisionList.map((division) {
-          final value = division == "All Divisions (Average)" ? "ALL_DIVISIONS_AVERAGE" : division;
+          final value = division == "All Divisions (Average)"
+              ? "ALL_DIVISIONS_AVERAGE"
+              : division;
           return SimpleDialogOption(
             onPressed: () => Navigator.pop(context, value),
             child: Text(division),
@@ -481,5 +489,3 @@ Future<String?> showDivisionPickerWithAverageOption(BuildContext context) async 
     },
   );
 }
-
-

@@ -268,7 +268,6 @@ class _RegisterWorkerScreenState extends State<RegisterWorkerScreen> {
             name: workerName,
             employeeId: workerId,
             division: division,
-            checkInTime: formattedTime,
             date: formattedDate,
             imagePath: filePath,
           ),

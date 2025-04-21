@@ -4,7 +4,6 @@ import 'dart:io';
 class RegisterSuccess extends StatelessWidget {
   final String name;
   final String employeeId;
-  final String checkInTime;
   final String date;
   final String imagePath;
   final String division;
@@ -12,7 +11,6 @@ class RegisterSuccess extends StatelessWidget {
   RegisterSuccess({
     required this.name,
     required this.employeeId,
-    required this.checkInTime,
     required this.date,
     required this.imagePath,
     required this.division,
@@ -63,7 +61,6 @@ class RegisterSuccess extends StatelessWidget {
                   infoRow("👤 Name", name),
                   infoRow("🆔 Employee ID", employeeId),
                   infoRow("📍 Division", division),
-                  infoRow("⏰ Check-In Time", checkInTime),
                   infoRow("📅 Date", date),
                   SizedBox(height: 20),
                   ElevatedButton(
