@@ -12,7 +12,7 @@
 
 
     <application
-        android:label="ahilyanagar"
+        android:label="Ahilyanagar Municipal Attendance"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true">
